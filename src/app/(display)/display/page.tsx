@@ -1,30 +1,31 @@
-const options = [
-  { label: "A", color: "bg-option-a", text: "Douala" },
-  { label: "B", color: "bg-option-b", text: "Yaoundé" },
-  { label: "C", color: "bg-option-c", text: "Buea" },
-  { label: "D", color: "bg-option-d", text: "Bamenda" },
+import Link from "next/link";
+
+const stages = [
+  { href: "/display/waiting", label: "Waiting Lobby" },
+  { href: "/display/question", label: "Active Question" },
+  { href: "/display/results", label: "Question Results" },
+  { href: "/display/leaderboard", label: "Final Leaderboard" },
 ];
 
-export default function DisplayPage() {
+export default function DisplayIndexPage() {
   return (
-    <div className="min-h-screen bg-display-bg text-display-text flex flex-col items-center justify-center p-10 gap-10">
-      <div className="text-warning text-3xl font-bold">00:12</div>
-
-      <h1 className="text-5xl font-bold text-center max-w-4xl">
-        What is the capital of Cameroon?
+    <div className="min-h-screen bg-display-bg text-display-text flex flex-col items-center justify-center gap-6 p-8">
+      <h1 className="font-display font-bold text-2xl">
+        Public Display &mdash; preview
       </h1>
-
-      <div className="grid grid-cols-2 gap-6 w-full max-w-4xl">
-        {options.map((opt) => (
-          <div
-            key={opt.label}
-            className={`${opt.color} rounded-2xl py-8 px-6 text-3xl font-semibold text-white flex items-center gap-4`}
+      <p className="text-display-text/60 text-sm text-center max-w-sm">
+        These four screens represent the different stages the projector
+        shows during a live session.
+      </p>
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        {stages.map((s) => (
+          <Link
+            key={s.href}
+            href={s.href}
+            className="text-center bg-white/5 hover:bg-white/10 rounded-xl py-3 transition-colors border border-white/10"
           >
-            <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl">
-              {opt.label}
-            </span>
-            {opt.text}
-          </div>
+            {s.label}
+          </Link>
         ))}
       </div>
     </div>

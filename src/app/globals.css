@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  /* Kwiz237 brand palette */
-  --color-primary: #4f46e5;      /* indigo */
-  --color-secondary: #7c3aed;    /* purple */
-  --color-background: #f8fafc;   /* very light gray */
+  /* Kwiz237 brand palette (updated) */
+  --color-primary: #08d9d6;      /* teal/cyan */
+  --color-secondary: #ff2e63;    /* pink/red */
+  --color-background: #eaeaea;   /* light gray */
   --color-surface: #ffffff;
-  --color-text: #0f172a;         /* dark navy */
-  --color-text-muted: #64748b;   /* slate */
-  --color-correct: #16a34a;      /* green */
-  --color-incorrect: #dc2626;    /* red */
-  --color-warning: #f59e0b;      /* amber - timer */
-  --color-disabled: #cbd5e1;     /* slate gray */
+  --color-text: #252a34;         /* dark charcoal */
+  --color-text-muted: #6b7280;   /* slate gray, derived - not in given palette */
+  --color-correct: #16a34a;      /* green - functional, kept from before */
+  --color-incorrect: #ff2e63;    /* pink/red doubles as incorrect state */
+  --color-warning: #f59e0b;      /* amber - timer, functional, kept from before */
+  --color-disabled: #cbd5e1;     /* slate gray, kept from before */
 
   /* MCQ option identity colors - never used to signal correctness */
-  --color-option-a: #4f46e5;
-  --color-option-b: #7c3aed;
-  --color-option-c: #0891b2;
-  --color-option-d: #ea580c;
+  --color-option-a: #08d9d6;
+  --color-option-b: #ff2e63;
+  --color-option-c: #6d28d9;     /* purple - added, distinct from the dark display background */
+  --color-option-d: #ffc93c;     /* gold - added, not in given 4-color palette, for a 4th distinct option */
 
   /* Public display (dark, large-text) */
-  --color-display-bg: #0f172a;
-  --color-display-text: #ffffff;
+  --color-display-bg: #252a34;
+  --color-display-text: #eaeaea;
 }
 
 @theme inline {
@@ -43,13 +43,48 @@
 
   --color-display-bg: var(--color-display-bg);
   --color-display-text: var(--color-display-text);
-
 }
 
 body {
   background: var(--color-background);
   color: var(--color-text);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial,
-    sans-serif;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Arial, sans-serif;
+}
+
+.font-display {
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+}
+
+.font-mono-caps {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.05em;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-scale-in {
+  animation: scale-in 0.4s ease-out forwards;
 }
