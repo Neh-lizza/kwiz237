@@ -19,7 +19,10 @@ export default function PlayPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <PlayerHeader status="Question live" />
+      <PlayerHeader
+        status="Question live"
+        progressPct={((index + 1) / sampleQuestions.length) * 100}
+      />
       <main className="flex-1 pt-24 px-5 pb-6 flex flex-col max-w-md mx-auto w-full">
         <div className="flex flex-col items-center pb-2">
           <CountdownTimer seconds={15} key={question.id} />

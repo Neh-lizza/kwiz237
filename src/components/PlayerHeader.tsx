@@ -1,6 +1,14 @@
 import { Zap, User } from "lucide-react";
 
-export default function PlayerHeader({ status }: { status: string }) {
+export default function PlayerHeader({
+  status,
+  progressPct,
+}: {
+  status: string;
+  /** 0-100. When provided, shows a thin progress bar under the header
+   * to indicate how far through the session the player is. */
+  progressPct?: number;
+}) {
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-disabled/60">
       <div className="h-16 px-5 flex items-center justify-between max-w-3xl mx-auto w-full">
@@ -19,6 +27,14 @@ export default function PlayerHeader({ status }: { status: string }) {
           </div>
         </div>
       </div>
+      {progressPct !== undefined && (
+        <div className="h-1 w-full bg-disabled/40">
+          <div
+            className="h-full bg-primary transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      )}
     </header>
   );
 }

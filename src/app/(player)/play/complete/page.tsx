@@ -121,10 +121,28 @@ export default function SessionCompletePage() {
               Final Rank
             </p>
           </div>
-          <div className="bg-surface rounded-xl p-4 flex flex-col items-center shadow-sm border border-disabled/50">
-            <Target className="text-option-c mb-1" size={24} />
-            <p className="font-display font-bold text-lg text-text">85%</p>
-            <p className="font-mono-caps text-[10px] text-text-muted mt-1">
+          <div className="bg-surface rounded-xl p-4 flex flex-col items-center shadow-sm border border-disabled/50 relative overflow-hidden">
+            <svg
+              className="absolute inset-0 w-full h-full opacity-10 pointer-events-none"
+              viewBox="0 0 100 100"
+            >
+              <circle
+                className="text-option-c"
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="8"
+                strokeDasharray="251"
+                strokeDashoffset="37"
+              />
+            </svg>
+            <Target className="text-option-c mb-1 relative z-10" size={24} />
+            <p className="font-display font-bold text-lg text-text relative z-10">
+              85%
+            </p>
+            <p className="font-mono-caps text-[10px] text-text-muted mt-1 relative z-10">
               Accuracy
             </p>
           </div>
@@ -140,10 +158,17 @@ export default function SessionCompletePage() {
                 <p className="text-sm text-text font-semibold">1.2s (Q4)</p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-option-d uppercase tracking-wider bg-option-d/10 px-2 py-1 rounded-full">
+            <span className="text-[10px] font-bold text-option-d uppercase tracking-wider bg-option-d/10 px-2 py-1 rounded-full rotate-3 inline-block animate-pulse">
               New PB!
             </span>
           </div>
+        </div>
+
+        <div className="w-full text-center relative z-10">
+          <span className="font-mono-caps text-[10px] text-text-muted inline-flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            Question 10 of 10
+          </span>
         </div>
 
         <div className="w-full flex flex-col gap-2 mt-2">

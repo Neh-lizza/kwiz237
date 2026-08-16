@@ -1,18 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, X } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
 
 export default function RoundResultPage() {
   const [correct, setCorrect] = useState(true);
+  const particleRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  // Shake animation on the incorrect-state icon, replayed each time it appears
+  useEffect(() => {
+    if (correct || !heroRef.current) return;
+    heroRef.current.animate(
+      [
+        { transform: "translateX(0)" },
+        { transform: "translateX(-12px)" },
+        { transform: "translateX(10px)" },
+        { transform: "translateX(-8px)" },
+        { transform: "translateX(6px)" },
+        { transform: "translateX(-4px)" },
+        { transform: "translateX(0)" },
+      ],
+      { duration: 500, easing: "cubic-bezier(.36,.07,.19,.97)" },
+    );
+  }, [correct]);
+
+  // Floating particles rising behind the incorrect-state card
+  useEffect(() => {
+    const container = particleRef.current;
+    if (!container || correct) return;
+    container.innerHTML = "";
+    const colors = ["#dc2626", "#ffdad6"];
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement("div");
+      const size = Math.random() * 8 + 4;
+      p.style.position = "absolute";
+      p.style.width = `${size}px`;
+      p.style.height = `${size}px`;
+      p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      p.style.borderRadius = "50%";
+      p.style.left = `${Math.random() * 100}%`;
+      p.style.bottom = "-10px";
+      p.style.opacity = "0";
+      const duration = Math.random() * 3 + 2;
+      const delay = Math.random() * 1;
+      p.animate(
+        [
+          { transform: "translateY(0) scale(1)", opacity: 0 },
+          { offset: 0.2, opacity: 0.6 },
+          { transform: "translateY(-420px) scale(0.5)", opacity: 0 },
+        ],
+        {
+          duration: duration * 1000,
+          delay: delay * 1000,
+          iterations: Infinity,
+          easing: "ease-in-out",
+        },
+      );
+      container.appendChild(p);
+    }
+  }, [correct]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <PlayerHeader status="Result" />
-      <main className="flex-1 pt-24 px-5 pb-6 flex flex-col items-center max-w-md mx-auto w-full">
+      <PlayerHeader status="Result" progressPct={40} />
+      <main className="flex-1 pt-24 px-5 pb-6 flex flex-col items-center max-w-md mx-auto w-full relative overflow-hidden">
+        {!correct && (
+          <>
+            <div
+              ref={particleRef}
+              className="absolute inset-0 pointer-events-none z-0"
+            />
+            <div
+              className="absolute inset-0 z-0 opacity-[0.04] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(45deg, var(--color-incorrect) 0, var(--color-incorrect) 2px, transparent 2px, transparent 16px), repeating-linear-gradient(-45deg, var(--color-incorrect) 0, var(--color-incorrect) 2px, transparent 2px, transparent 16px)",
+              }}
+            />
+          </>
+        )}
+
         <div
-          className={`w-full rounded-2xl p-8 flex flex-col items-center text-center gap-4 shadow-lg ${
+          ref={heroRef}
+          className={`relative z-10 w-full rounded-2xl p-8 flex flex-col items-center text-center gap-4 shadow-lg ${
             correct ? "bg-correct text-white" : "bg-incorrect text-white"
           }`}
         >
@@ -24,7 +96,7 @@ export default function RoundResultPage() {
               {correct ? "Correct!" : "Incorrect!"}
             </h2>
             <p className="opacity-90 mt-1">
-              {correct ? "Nice one, keep it up." : "Ouch, that was a tough one."}
+              {correct ? "Nice one, keep it up." : "Not quite right this time."}
             </p>
           </div>
 
@@ -43,21 +115,21 @@ export default function RoundResultPage() {
           </div>
         </div>
 
-        <div className="w-full bg-surface rounded-xl p-4 mt-4 shadow-sm border border-disabled/50">
+        <div className="relative z-10 w-full bg-surface rounded-xl p-4 mt-4 shadow-sm border border-disabled/50">
           <p className="font-mono-caps text-[10px] text-text-muted uppercase mb-1">
             The correct answer was
           </p>
           <p className="font-semibold text-primary">C. Casablanca</p>
         </div>
 
-        <button className="w-full h-14 bg-primary text-white rounded-xl font-semibold shadow-md active:scale-95 transition-transform mt-6">
+        <button className="relative z-10 w-full h-14 bg-primary text-white rounded-xl font-semibold shadow-md active:scale-95 transition-transform mt-6">
           Next Question
         </button>
 
         {/* Dev-only toggle to preview both states */}
         <button
           onClick={() => setCorrect((c) => !c)}
-          className="mt-4 text-xs text-text-muted underline"
+          className="relative z-10 mt-4 text-xs text-text-muted underline"
         >
           Toggle correct/incorrect preview
         </button>

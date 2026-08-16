@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { Check } from "lucide-react";
 import type { MultipleChoiceQuestion } from "@/types/question";
 
 const optionColors = [
@@ -12,19 +16,34 @@ export default function MultipleChoicePlayer({
 }: {
   question: MultipleChoiceQuestion;
 }) {
+  const [selected, setSelected] = useState<string | null>(null);
+
   return (
-    <div className="grid grid-cols-1 gap-3">
-      {question.options.map((opt, i) => (
-        <button
-          key={opt.id}
-          className={`${optionColors[i % optionColors.length]} text-white rounded-xl py-5 px-4 flex items-center gap-3 font-semibold text-left hover:opacity-90 transition-opacity`}
-        >
-          <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm">
-            {opt.label}
-          </span>
-          {opt.text}
-        </button>
-      ))}
+    <div className="flex flex-col gap-3">
+      {question.options.map((opt, i) => {
+        const isSelected = selected === opt.id;
+        const isDimmed = selected !== null && !isSelected;
+        return (
+          <button
+            key={opt.id}
+            disabled={selected !== null}
+            onClick={() => setSelected(opt.id)}
+            className={`${optionColors[i % optionColors.length]} relative overflow-hidden rounded-xl min-h-[64px] flex items-stretch text-left text-white shadow-sm transition-all active:scale-[0.98] ${
+              isDimmed ? "opacity-40 scale-[0.98]" : ""
+            } ${isSelected ? "ring-4 ring-white/60" : ""}`}
+          >
+            <div className="w-16 flex items-center justify-center bg-black/20 shrink-0">
+              <span className="font-display font-bold text-xl opacity-90">
+                {opt.label}
+              </span>
+            </div>
+            <div className="flex-1 px-4 flex items-center justify-between gap-2">
+              <span className="font-display font-semibold">{opt.text}</span>
+              {isSelected && <Check size={20} />}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
