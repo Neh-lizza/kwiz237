@@ -8,7 +8,7 @@ export default function Home() {
           Kwiz237
         </h1>
         <p className="text-text-muted mt-2">
-          Live, host-controlled quiz competitions for in-person events.
+          Live, host-controlled  quiz competitions for in-person events.
         </p>
       </div>
 
