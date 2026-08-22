@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Hash, Smile, ArrowRight, Wine, Code2, ChevronRight, Zap } from "lucide-react";
+import { savePlayerSession } from "@/lib/player-session";
 
 const recentSessions = [
   { title: "Weekly Trivia Night", meta: "Last played 2 days ago", icon: Wine, color: "bg-secondary/15 text-secondary" },
@@ -9,14 +11,16 @@ const recentSessions = [
 ];
 
 export default function JoinPage() {
+  const router = useRouter();
   const [code, setCode] = useState("");
   const [nickname, setNickname] = useState("");
   const [joining, setJoining] = useState(false);
   const [codeError, setCodeError] = useState(false);
   const [nameError, setNameError] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  function handleJoin() {
-    const badCode = code.length < 6;
+  async function handleJoin() {
+    const badCode = code.length < 5;
     const badName = nickname.trim().length === 0;
     if (badCode || badName) {
       setCodeError(badCode);
@@ -27,7 +31,35 @@ export default function JoinPage() {
       }, 500);
       return;
     }
+
+    setServerError(null);
     setJoining(true);
+
+    try {
+      const res = await fetch("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, nickname }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setServerError(data.error ?? "Could not join that session");
+        setJoining(false);
+        return;
+      }
+
+      savePlayerSession({
+        sessionId: data.sessionId,
+        playerId: data.playerId,
+        nickname,
+        sessionCode: code,
+      });
+      router.push("/waiting");
+    } catch {
+      setServerError("Network error - check your connection and try again");
+      setJoining(false);
+    }
   }
 
   return (
@@ -69,10 +101,10 @@ export default function JoinPage() {
               />
               <input
                 id="sessionCode"
-                maxLength={6}
+                maxLength={5}
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="Enter 6-digit code"
+                placeholder="Enter 5-character code"
                 className={`w-full bg-background text-text rounded-lg py-3 pl-10 pr-3 uppercase tracking-widest text-center focus:outline-none focus:ring-2 transition-all ${
                   codeError
                     ? "ring-2 ring-incorrect animate-[shake_0.3s_ease-in-out]"
@@ -112,11 +144,17 @@ export default function JoinPage() {
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full bg-primary text-white font-semibold py-3 rounded-xl mt-5 flex items-center justify-center gap-2 shadow-md active:scale-[0.98] active:translate-y-0.5 transition-all"
+            className="w-full bg-primary text-white font-semibold py-3 rounded-xl mt-5 flex items-center justify-center gap-2 shadow-md active:scale-[0.98] active:translate-y-0.5 transition-all disabled:opacity-60"
           >
             {joining ? "Joining..." : "Join Game"}
             {!joining && <ArrowRight size={18} />}
           </button>
+
+          {serverError && (
+            <p className="text-sm text-incorrect bg-incorrect/10 rounded-lg px-3 py-2 mt-3 text-center">
+              {serverError}
+            </p>
+          )}
         </div>
 
         <div className="w-full">

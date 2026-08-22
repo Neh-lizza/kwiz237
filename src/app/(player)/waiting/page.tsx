@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Brain,
-  Rocket,
-  Lightbulb,
+  Users,
   Loader2,
   ChevronRight,
   Home,
@@ -13,25 +12,52 @@ import {
   Hourglass,
 } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
+import { getPlayerSession } from "@/lib/player-session";
 
-const joinedPlayers = [
-  { name: "QuizWhiz", icon: Brain },
-  { name: "QuantumLeap", icon: Rocket },
-  { name: "BrightSpark", icon: Lightbulb },
-];
+interface Player {
+  id: string;
+  nickname: string;
+}
 
 export default function WaitingForHostPage() {
-  const [players, setPlayers] = useState(joinedPlayers);
-  const [showJoining, setShowJoining] = useState(true);
+  const router = useRouter();
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [myNickname, setMyNickname] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const poll = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) {
+      router.push("/join");
+      return;
+    }
+    setMyNickname(stored.nickname);
+
+    try {
+      const [playersRes, questionRes] = await Promise.all([
+        fetch(`/api/sessions/${stored.sessionId}/players`),
+        fetch(`/api/sessions/${stored.sessionId}/current-question`),
+      ]);
+      const playersData = await playersRes.json();
+      const questionData = await questionRes.json();
+
+      if (playersRes.ok) setPlayers(playersData.players);
+
+      // Once the host launches question 1, the state flips from
+      // "pending" to "active" and it's time to head to /play.
+      if (questionData.state === "active") {
+        router.push("/play");
+      }
+    } catch {
+      setError("Lost connection - retrying...");
+    }
+  }, [router]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPlayers((p) => [...p, { name: "TriviaTitan", icon: Brain }]);
-      setShowJoining(false);
-      setTimeout(() => setShowJoining(true), 1200);
-    }, 3000);
-    return () => clearTimeout(t);
-  }, []);
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [poll]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -43,7 +69,6 @@ export default function WaitingForHostPage() {
         <div className="flex flex-col items-center gap-2 mb-6 relative z-10">
           <div className="relative w-28 h-28 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping [animation-duration:3s]" />
-            <div className="absolute inset-0 rounded-full bg-secondary/20 animate-ping [animation-duration:3s] [animation-delay:1s]" />
             <div className="w-24 h-24 rounded-full bg-surface flex items-center justify-center relative z-10 shadow-lg">
               <span className="text-4xl">🥔</span>
             </div>
@@ -52,7 +77,7 @@ export default function WaitingForHostPage() {
             You are playing as
           </h1>
           <p className="font-display font-extrabold text-2xl text-primary text-center">
-            CosmicPotato99
+            {myNickname || "..."}
           </p>
         </div>
 
@@ -65,7 +90,7 @@ export default function WaitingForHostPage() {
             Waiting for host...
           </h2>
           <p className="text-sm text-text-muted mt-1">
-            The quiz will begin shortly.
+            {error ?? "The quiz will begin shortly."}
           </p>
         </div>
 
@@ -75,9 +100,9 @@ export default function WaitingForHostPage() {
               Players Joined
             </h3>
             <div className="bg-background px-3 py-1 rounded-full flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+              <Users size={14} className="text-text-muted" />
               <span className="font-mono-caps text-[11px] text-text-muted">
-                {players.length}/50
+                {players.length}
               </span>
             </div>
           </div>
@@ -85,27 +110,20 @@ export default function WaitingForHostPage() {
           <div className="flex flex-col gap-2">
             {players.map((p) => (
               <div
-                key={p.name}
-                className="w-full bg-secondary/10 rounded-lg p-3 flex items-center justify-between shadow-sm transition-all hover:-translate-y-0.5"
+                key={p.id}
+                className="w-full bg-secondary/10 rounded-lg p-3 flex items-center justify-between shadow-sm"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center">
-                    <p.icon className="text-text-muted" size={18} />
-                  </div>
-                  <span className="font-semibold text-sm text-text">
-                    {p.name}
-                  </span>
-                </div>
+                <span className="font-semibold text-sm text-text">
+                  {p.nickname}
+                </span>
                 <ChevronRight className="text-secondary" size={18} />
               </div>
             ))}
-            {showJoining && (
+            {players.length === 0 && (
               <div className="w-full bg-background rounded-lg p-3 flex items-center gap-3 border border-dashed border-disabled opacity-70">
-                <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center">
-                  <Loader2 className="text-text-muted animate-spin" size={18} />
-                </div>
+                <Loader2 className="text-text-muted animate-spin" size={18} />
                 <span className="text-sm text-text-muted italic">
-                  Someone is joining...
+                  Loading players...
                 </span>
               </div>
             )}

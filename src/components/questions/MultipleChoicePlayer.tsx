@@ -13,21 +13,34 @@ const optionColors = [
 
 export default function MultipleChoicePlayer({
   question,
+  onAnswer,
+  disabled = false,
 }: {
   question: MultipleChoiceQuestion;
+  /** Called with the chosen option's id. If omitted, this behaves as
+   * a local-only preview (used by the /play demo switcher). */
+  onAnswer?: (optionId: string) => void;
+  /** True once an answer has already been submitted - locks the UI. */
+  disabled?: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
+
+  function handleClick(optionId: string) {
+    if (selected !== null || disabled) return;
+    setSelected(optionId);
+    onAnswer?.(optionId);
+  }
 
   return (
     <div className="flex flex-col gap-3">
       {question.options.map((opt, i) => {
         const isSelected = selected === opt.id;
-        const isDimmed = selected !== null && !isSelected;
+        const isDimmed = (selected !== null || disabled) && !isSelected;
         return (
           <button
             key={opt.id}
-            disabled={selected !== null}
-            onClick={() => setSelected(opt.id)}
+            disabled={selected !== null || disabled}
+            onClick={() => handleClick(opt.id)}
             className={`${optionColors[i % optionColors.length]} relative overflow-hidden rounded-xl min-h-[64px] flex items-stretch text-left text-white shadow-sm transition-all active:scale-[0.98] ${
               isDimmed ? "opacity-40 scale-[0.98]" : ""
             } ${isSelected ? "ring-4 ring-white/60" : ""}`}

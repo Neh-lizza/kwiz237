@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 // GET /api/sessions/[sessionId]/results/[sessionQuestionId]?playerId=xxx
 //
@@ -19,7 +19,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const playerId = searchParams.get("playerId");
 
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const { data: sq } = await supabase
     .from("session_questions")

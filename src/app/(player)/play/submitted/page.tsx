@@ -1,33 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Lock, Check, Users } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
-
-const options = [
-  { label: "A", text: "Gone with the Wind" },
-  { label: "B", text: "Citizen Kane" },
-  { label: "C", text: "Casablanca" },
-  { label: "D", text: "The Godfather" },
-];
-const selected = "C";
-const MAX_PLAYERS = 50;
+import { getPlayerSession } from "@/lib/player-session";
 
 export default function AnswerSubmittedPage() {
-  const [count, setCount] = useState(38);
-  const [bump, setBump] = useState(false);
+  const router = useRouter();
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [totalPlayers, setTotalPlayers] = useState(0);
+
+  const poll = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) {
+      router.push("/join");
+      return;
+    }
+
+    try {
+      const [questionRes, playersRes] = await Promise.all([
+        fetch(`/api/sessions/${stored.sessionId}/current-question`),
+        fetch(`/api/sessions/${stored.sessionId}/players`),
+      ]);
+      const questionData = await questionRes.json();
+      const playersData = await playersRes.json();
+
+      if (playersRes.ok) setTotalPlayers(playersData.players.length);
+
+      if (questionData.state === "closed" || questionData.state === "revealed") {
+        router.push("/play/result");
+        return;
+      }
+
+      if (stored.lastSessionQuestionId) {
+        const resultsRes = await fetch(
+          `/api/sessions/${stored.sessionId}/results/${stored.lastSessionQuestionId}`,
+        );
+        if (resultsRes.ok) {
+          const resultsData = await resultsRes.json();
+          setAnsweredCount(resultsData.total ?? 0);
+        }
+      }
+    } catch {
+      // keep retrying silently
+    }
+  }, [router]);
 
   useEffect(() => {
-    if (count >= MAX_PLAYERS) return;
-    const t = setTimeout(() => {
-      setCount((c) => Math.min(c + (Math.random() > 0.7 ? 2 : 1), MAX_PLAYERS));
-      setBump(true);
-      setTimeout(() => setBump(false), 300);
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [count]);
-
-  const pct = (count / MAX_PLAYERS) * 100;
+    poll();
+    const interval = setInterval(poll, 1500);
+    return () => clearInterval(interval);
+  }, [poll]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -53,57 +77,13 @@ export default function AnswerSubmittedPage() {
           </p>
         </div>
 
-        <div className="bg-surface rounded-xl p-4 mb-6 shadow-sm opacity-90 border border-disabled/50 relative z-10">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary font-mono-caps text-[10px] uppercase">
-              Pop Culture
-            </span>
-            <span className="text-text-muted font-mono-caps text-[10px]">
-              Question 4 of 10
-            </span>
-          </div>
-          <h3 className="font-semibold text-text">
-            Which iconic movie features the quote, &ldquo;Here&rsquo;s
-            looking at you, kid&rdquo;?
-          </h3>
-        </div>
-
-        <div className="flex flex-col gap-3 relative z-10">
-          {options.map((opt) =>
-            opt.label === selected ? (
-              <div
-                key={opt.label}
-                className="w-full rounded-xl bg-primary text-white p-4 flex items-center gap-3 shadow-lg"
-              >
-                <div className="w-10 h-10 shrink-0 rounded-lg bg-white/20 flex items-center justify-center font-display font-bold">
-                  {opt.label}
-                </div>
-                <span className="flex-grow font-semibold text-left">
-                  {opt.text}
-                </span>
-                <div className="shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                  <Check size={16} />
-                </div>
-              </div>
-            ) : (
-              <div
-                key={opt.label}
-                className="w-full rounded-xl bg-surface p-4 flex items-center gap-3 opacity-40 border border-disabled/50"
-              >
-                <div className="w-10 h-10 shrink-0 rounded-lg bg-background flex items-center justify-center font-display font-bold text-text-muted">
-                  {opt.label}
-                </div>
-                <span className="text-text">{opt.text}</span>
-              </div>
-            ),
-          )}
-        </div>
-
         <div className="mt-auto pt-8 relative z-10">
           <div className="w-full bg-background rounded-full p-1 shadow-inner relative overflow-hidden">
             <div
               className="absolute left-0 top-0 bottom-0 bg-primary/10 rounded-full transition-all duration-1000 ease-out"
-              style={{ width: `${pct}%` }}
+              style={{
+                width: `${totalPlayers ? (answeredCount / totalPlayers) * 100 : 0}%`,
+              }}
             />
             <div className="relative z-10 w-full flex items-center justify-between px-4 py-2.5">
               <div className="flex items-center gap-2">
@@ -112,12 +92,10 @@ export default function AnswerSubmittedPage() {
                   Players Answered
                 </span>
               </div>
-              <div className="font-display font-bold text-lg text-primary flex items-baseline gap-1">
-                <span className={bump ? "text-secondary scale-110 transition-transform" : "transition-transform"}>
-                  {count}
-                </span>
+              <div className="font-display font-bold text-lg text-primary">
+                {answeredCount}
                 <span className="text-sm text-text-muted font-normal">
-                  /{MAX_PLAYERS}
+                  /{totalPlayers}
                 </span>
               </div>
             </div>
