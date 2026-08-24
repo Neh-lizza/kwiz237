@@ -54,7 +54,7 @@ export default async function HostDashboardPage() {
               href="/host/questions"
               className="text-sm text-primary hover:underline flex items-center gap-1.5"
             >
-              <ListChecks size={14} /> Add a question
+              <ListChecks size={14} /> Add a  question
             </Link>
             <Link
               href="/host/sessions"
