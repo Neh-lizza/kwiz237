@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
 import { getPlayerSession } from "@/lib/player-session";
+import { safeFetchJson } from "@/lib/safe-fetch";
+import { useSessionRealtime } from "@/hooks/useSessionRealtime";
 
 interface Player {
   id: string;
@@ -21,43 +23,60 @@ interface Player {
 
 export default function WaitingForHostPage() {
   const router = useRouter();
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [myNickname, setMyNickname] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const poll = useCallback(async () => {
+  const refreshPlayers = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) return;
+    const { ok, data } = await safeFetchJson<{ players: Player[] }>(
+      `/api/sessions/${stored.sessionId}/players`,
+    );
+    if (ok && data) setPlayers(data.players);
+  }, []);
+
+  const checkIfLaunched = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) return;
+    const { ok, data } = await safeFetchJson<{ state: string }>(
+      `/api/sessions/${stored.sessionId}/current-question`,
+    );
+    if (ok && data?.state === "active") {
+      router.push("/play");
+    }
+  }, [router]);
+
+  // Initial load: resolve session id, grab the player list once, and
+  // check in case the host already launched question 1 before we
+  // even finished loading this page.
+  useEffect(() => {
     const stored = getPlayerSession();
     if (!stored) {
       router.push("/join");
       return;
     }
+    setSessionId(stored.sessionId);
     setMyNickname(stored.nickname);
+    refreshPlayers();
+    checkIfLaunched();
+  }, [router, refreshPlayers, checkIfLaunched]);
 
-    try {
-      const [playersRes, questionRes] = await Promise.all([
-        fetch(`/api/sessions/${stored.sessionId}/players`),
-        fetch(`/api/sessions/${stored.sessionId}/current-question`),
-      ]);
-      const playersData = await playersRes.json();
-      const questionData = await questionRes.json();
-
-      if (playersRes.ok) setPlayers(playersData.players);
-
-      // Once the host launches question 1, the state flips from
-      // "pending" to "active" and it's time to head to /play.
-      if (questionData.state === "active") {
+  // Everything after the initial load is realtime-driven: a new
+  // player joining refreshes the list, and the host launching
+  // question 1 (session_questions flips to "active") sends us to /play.
+  useSessionRealtime(sessionId, {
+    onPlayerJoin: () => {
+      refreshPlayers();
+    },
+    onQuestionChange: (payload) => {
+      const row = payload.new as { state?: string };
+      if (row.state === "active") {
         router.push("/play");
       }
-    } catch {
-      setError("Lost connection - retrying...");
-    }
-  }, [router]);
-
-  useEffect(() => {
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => clearInterval(interval);
-  }, [poll]);
+    },
+  });
 
   return (
     <div className="min-h-screen flex flex-col">

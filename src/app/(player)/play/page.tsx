@@ -17,6 +17,8 @@ import {
   getPlayerSession,
   savePlayerSession,
 } from "@/lib/player-session";
+import { safeFetchJson } from "@/lib/safe-fetch";
+import { useSessionRealtime } from "@/hooks/useSessionRealtime";
 import type { Question, QuestionType } from "@/types/question";
 
 interface LiveQuestion {
@@ -37,22 +39,16 @@ export default function PlayPage() {
   const [live, setLive] = useState<LiveQuestion | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [checkedSession, setCheckedSession] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const submittedRef = useRef(false);
 
-  const poll = useCallback(async () => {
-    const stored = getPlayerSession();
-    if (!stored) {
-      setIsDemo(true);
-      setCheckedSession(true);
-      return;
-    }
-
-    try {
-      const res = await fetch(
-        `/api/sessions/${stored.sessionId}/current-question`,
+  const fetchCurrentQuestion = useCallback(
+    async (sid: string) => {
+      const { ok, data } = await safeFetchJson<LiveQuestion & { state: string }>(
+        `/api/sessions/${sid}/current-question`,
       );
-      const data = await res.json();
       setCheckedSession(true);
+      if (!ok || !data) return;
 
       if (data.state === "active") {
         submittedRef.current = false;
@@ -65,16 +61,37 @@ export default function PlayPage() {
           router.push("/play/submitted");
         }
       }
-    } catch {
-      // keep retrying silently
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
+  // Initial load: figure out whether we're in a real session or the
+  // design-preview demo, and fetch the current question once.
   useEffect(() => {
-    poll();
-    const interval = setInterval(poll, 1500);
-    return () => clearInterval(interval);
-  }, [poll]);
+    const stored = getPlayerSession();
+    if (!stored) {
+      setIsDemo(true);
+      setCheckedSession(true);
+      return;
+    }
+    setSessionId(stored.sessionId);
+    fetchCurrentQuestion(stored.sessionId);
+  }, [fetchCurrentQuestion]);
+
+  // Everything after that is realtime-driven: a question's state
+  // changing (host launches/closes it) or the session ending both
+  // arrive as push events instead of us asking every 1.5 seconds.
+  useSessionRealtime(sessionId, {
+    onQuestionChange: () => {
+      if (sessionId) fetchCurrentQuestion(sessionId);
+    },
+    onSessionChange: (payload) => {
+      const row = payload.new as { status?: string };
+      if (row.status === "completed") {
+        router.push("/play/complete");
+      }
+    },
+  });
 
   async function submitAnswer(answer: unknown) {
     const stored = getPlayerSession();

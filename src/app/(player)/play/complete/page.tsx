@@ -1,29 +1,60 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Trophy, Target, Timer, ArrowRight } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
+import { getPlayerSession, clearPlayerSession } from "@/lib/player-session";
 
-const TARGET_SCORE = 8450;
+interface ScoreData {
+  totalScore: number;
+  correctCount: number;
+  incorrectCount: number;
+  rank: number;
+  totalPlayers: number;
+  fastestAnswerSeconds: number | null;
+}
 
 export default function SessionCompletePage() {
+  const router = useRouter();
   const [score, setScore] = useState(0);
+  const [data, setData] = useState<ScoreData | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Animated score counter
+  const load = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) {
+      router.push("/join");
+      return;
+    }
+    const res = await fetch(
+      `/api/sessions/${stored.sessionId}/score?playerId=${stored.playerId}`,
+    );
+    if (res.ok) {
+      setData(await res.json());
+    }
+  }, [router]);
+
   useEffect(() => {
+    load();
+  }, [load]);
+
+  // Animated score counter, driven by the real total once it loads
+  useEffect(() => {
+    if (!data) return;
     let raf: number;
     const start = performance.now();
     const duration = 1500;
+    const target = data.totalScore;
     const step = (t: number) => {
       const progress = Math.min((t - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setScore(Math.floor(eased * TARGET_SCORE));
+      setScore(Math.floor(eased * target));
       if (progress < 1) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [data]);
 
   // Lightweight confetti
   useEffect(() => {
@@ -39,7 +70,7 @@ export default function SessionCompletePage() {
     resize();
     window.addEventListener("resize", resize);
 
-    const colors = ["#08D9D6", "#FF2E63", "#FFC93C", "#252A34"];
+    const colors = ["#08D9D6", "#FF2E63", "#FFC93C", "#6D28D9"];
     const pieces = Array.from({ length: 60 }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height - canvas.height,
@@ -81,6 +112,32 @@ export default function SessionCompletePage() {
     };
   }, []);
 
+  function handleBackToLobby() {
+    clearPlayerSession();
+    router.push("/join");
+  }
+
+  const totalAnswered = (data?.correctCount ?? 0) + (data?.incorrectCount ?? 0);
+  const accuracyPct =
+    totalAnswered > 0
+      ? Math.round(((data?.correctCount ?? 0) / totalAnswered) * 100)
+      : 0;
+  const rankSuffix = (n: number) => {
+    if (n % 10 === 1 && n % 100 !== 11) return "st";
+    if (n % 10 === 2 && n % 100 !== 12) return "nd";
+    if (n % 10 === 3 && n % 100 !== 13) return "rd";
+    return "th";
+  };
+
+  if (!data) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <PlayerHeader status="Session complete" />
+        <p className="text-text-muted mt-16">Tallying final scores...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
       <PlayerHeader status="Session complete" />
@@ -97,7 +154,11 @@ export default function SessionCompletePage() {
           <h1 className="font-display font-bold text-2xl text-primary">
             Quiz Complete!
           </h1>
-          <p className="text-sm text-text-muted">Incredible performance.</p>
+          <p className="text-sm text-text-muted">
+            {data.rank === 1
+              ? "You came out on top!"
+              : "Great effort out there."}
+          </p>
         </div>
 
         <div className="w-full rounded-2xl bg-primary text-white p-6 flex flex-col items-center shadow-xl">
@@ -108,15 +169,25 @@ export default function SessionCompletePage() {
             {score.toLocaleString()}
           </div>
           <div className="w-full bg-white/20 rounded-full h-2 mb-2 overflow-hidden">
-            <div className="bg-option-d h-full rounded-full w-[85%]" />
+            <div
+              className="bg-option-d h-full rounded-full transition-all duration-1000"
+              style={{
+                width: `${data.totalPlayers ? 100 - ((data.rank - 1) / data.totalPlayers) * 100 : 100}%`,
+              }}
+            />
           </div>
-          <p className="text-sm opacity-80">Top 15% of players today</p>
+          <p className="text-sm opacity-80">
+            Rank {data.rank} of {data.totalPlayers} players
+          </p>
         </div>
 
         <div className="w-full grid grid-cols-2 gap-3">
           <div className="bg-surface rounded-xl p-4 flex flex-col items-center shadow-sm border border-disabled/50">
             <Trophy className="text-secondary mb-1" size={24} />
-            <p className="font-display font-bold text-lg text-text">3rd</p>
+            <p className="font-display font-bold text-lg text-text">
+              {data.rank}
+              {rankSuffix(data.rank)}
+            </p>
             <p className="font-mono-caps text-[10px] text-text-muted mt-1">
               Final Rank
             </p>
@@ -135,12 +206,12 @@ export default function SessionCompletePage() {
                 stroke="currentColor"
                 strokeWidth="8"
                 strokeDasharray="251"
-                strokeDashoffset="37"
+                strokeDashoffset={251 - (accuracyPct / 100) * 251}
               />
             </svg>
             <Target className="text-option-c mb-1 relative z-10" size={24} />
             <p className="font-display font-bold text-lg text-text relative z-10">
-              85%
+              {accuracyPct}%
             </p>
             <p className="font-mono-caps text-[10px] text-text-muted mt-1 relative z-10">
               Accuracy
@@ -155,29 +226,28 @@ export default function SessionCompletePage() {
                 <p className="font-mono-caps text-[10px] text-text-muted">
                   Fastest Answer
                 </p>
-                <p className="text-sm text-text font-semibold">1.2s (Q4)</p>
+                <p className="text-sm text-text font-semibold">
+                  {data.fastestAnswerSeconds !== null
+                    ? `${data.fastestAnswerSeconds.toFixed(1)}s`
+                    : "No graded answers"}
+                </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-option-d uppercase tracking-wider bg-option-d/10 px-2 py-1 rounded-full rotate-3 inline-block animate-pulse">
-              New PB!
-            </span>
+            {data.rank === 1 && (
+              <span className="text-[10px] font-bold text-option-d uppercase tracking-wider bg-option-d/10 px-2 py-1 rounded-full rotate-3 inline-block animate-pulse">
+                Top Score!
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="w-full text-center relative z-10">
-          <span className="font-mono-caps text-[10px] text-text-muted inline-flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            Question 10 of 10
-          </span>
-        </div>
-
         <div className="w-full flex flex-col gap-2 mt-2">
-          <button className="w-full bg-primary text-white font-semibold py-4 rounded-full shadow-md active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-            Back to Lobby
+          <button
+            onClick={handleBackToLobby}
+            className="w-full bg-primary text-white font-semibold py-4 rounded-full shadow-md active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+          >
+            Join Another Session
             <ArrowRight size={18} />
-          </button>
-          <button className="w-full bg-transparent text-primary font-semibold py-4 rounded-full active:bg-primary/10 transition-colors">
-            View Full Results
           </button>
         </div>
       </main>

@@ -70,7 +70,22 @@ export default function RoundResultPage() {
     );
   }, [correct, loading]);
 
-  function handleNext() {
+  async function handleNext() {
+    const stored = getPlayerSession();
+    if (stored) {
+      try {
+        const res = await fetch(`/api/sessions/${stored.sessionId}`);
+        if (res.ok) {
+          const sessionData = await res.json();
+          if (sessionData.status === "completed") {
+            router.push("/play/complete");
+            return;
+          }
+        }
+      } catch {
+        // fall through to /play - the poll loop there will retry
+      }
+    }
     router.push("/play");
   }
 

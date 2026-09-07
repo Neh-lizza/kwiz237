@@ -19,6 +19,13 @@ export default function AnswerSubmittedPage() {
     }
 
     try {
+      const statusRes = await fetch(`/api/sessions/${stored.sessionId}`);
+      const statusData = await statusRes.json();
+      if (statusRes.ok && statusData.status === "completed") {
+        router.push("/play/complete");
+        return;
+      }
+
       const [questionRes, playersRes] = await Promise.all([
         fetch(`/api/sessions/${stored.sessionId}/current-question`),
         fetch(`/api/sessions/${stored.sessionId}/players`),

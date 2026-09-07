@@ -11,6 +11,7 @@ import {
   Users,
   QrCode,
 } from "lucide-react";
+import { safeFetchJson } from "@/lib/safe-fetch";
 
 interface SessionInfo {
   id: string;
@@ -50,34 +51,41 @@ export default function SessionControlPage({
   const [actionLoading, setActionLoading] = useState(false);
 
   const poll = useCallback(async () => {
-    const [sessionsRes, statusRes, playersRes] = await Promise.all([
-      fetch("/api/sessions"),
-      fetch(`/api/sessions/${id}`),
-      fetch(`/api/sessions/${id}/players`),
+    const [
+      { ok: sessionsOk, data: sessionsData },
+      { ok: statusOk, data: statusData },
+      { ok: playersOk, data: playersData },
+    ] = await Promise.all([
+      safeFetchJson<{ sessions: { id: string; code: string }[] }>(
+        "/api/sessions",
+      ),
+      safeFetchJson<SessionInfo>(`/api/sessions/${id}`),
+      safeFetchJson<{ players: Player[] }>(`/api/sessions/${id}/players`),
     ]);
-    const sessionsData = await sessionsRes.json();
-    const statusData = await statusRes.json();
-    const playersData = await playersRes.json();
 
-    if (statusRes.ok) setSession(statusData);
-    if (playersRes.ok) setPlayers(playersData.players);
-    if (sessionsRes.ok) {
-      const match = sessionsData.sessions.find(
-        (s: { id: string; code: string }) => s.id === id,
-      );
+    // Skip this cycle entirely if the core status fetch failed or
+    // came back empty - a hot-reload-interrupted request shouldn't
+    // wipe the control panel, it should just retry in 2 seconds.
+    if (!statusOk || !statusData) return;
+    setSession(statusData);
+    if (playersOk && playersData) setPlayers(playersData.players);
+    if (sessionsOk && sessionsData) {
+      const match = sessionsData.sessions.find((s) => s.id === id);
       if (match) setCode(match.code);
     }
 
     if (statusData.status === "active") {
-      const cqRes = await fetch(`/api/sessions/${id}/current-question`);
-      const cqData = await cqRes.json();
+      const { data: cqData } = await safeFetchJson<CurrentQuestion>(
+        `/api/sessions/${id}/current-question`,
+      );
+      if (!cqData) return;
       setCurrent(cqData);
 
       if (cqData.state === "closed" || cqData.state === "revealed") {
-        const rRes = await fetch(
+        const { ok: rOk, data: rData } = await safeFetchJson<Results>(
           `/api/sessions/${id}/results/${cqData.sessionQuestionId}`,
         );
-        if (rRes.ok) setResults(await rRes.json());
+        if (rOk && rData) setResults(rData);
       } else {
         setResults(null);
       }
