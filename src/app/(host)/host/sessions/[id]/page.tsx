@@ -12,6 +12,7 @@ import {
   QrCode,
 } from "lucide-react";
 import { safeFetchJson } from "@/lib/safe-fetch";
+import { useSessionRealtime } from "@/hooks/useSessionRealtime";
 
 interface SessionInfo {
   id: string;
@@ -50,53 +51,68 @@ export default function SessionControlPage({
   const [results, setResults] = useState<Results | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const poll = useCallback(async () => {
-    const [
-      { ok: sessionsOk, data: sessionsData },
-      { ok: statusOk, data: statusData },
-      { ok: playersOk, data: playersData },
-    ] = await Promise.all([
-      safeFetchJson<{ sessions: { id: string; code: string }[] }>(
-        "/api/sessions",
-      ),
-      safeFetchJson<SessionInfo>(`/api/sessions/${id}`),
-      safeFetchJson<{ players: Player[] }>(`/api/sessions/${id}/players`),
-    ]);
+  const refreshSession = useCallback(async () => {
+    const { ok, data } = await safeFetchJson<SessionInfo>(
+      `/api/sessions/${id}`,
+    );
+    if (ok && data) setSession(data);
+  }, [id]);
 
-    // Skip this cycle entirely if the core status fetch failed or
-    // came back empty - a hot-reload-interrupted request shouldn't
-    // wipe the control panel, it should just retry in 2 seconds.
-    if (!statusOk || !statusData) return;
-    setSession(statusData);
-    if (playersOk && playersData) setPlayers(playersData.players);
-    if (sessionsOk && sessionsData) {
-      const match = sessionsData.sessions.find((s) => s.id === id);
-      if (match) setCode(match.code);
-    }
+  const refreshPlayers = useCallback(async () => {
+    const { ok, data } = await safeFetchJson<{ players: Player[] }>(
+      `/api/sessions/${id}/players`,
+    );
+    if (ok && data) setPlayers(data.players);
+  }, [id]);
 
-    if (statusData.status === "active") {
-      const { data: cqData } = await safeFetchJson<CurrentQuestion>(
-        `/api/sessions/${id}/current-question`,
+  const refreshCurrentQuestion = useCallback(async () => {
+    const { ok, data } = await safeFetchJson<CurrentQuestion>(
+      `/api/sessions/${id}/current-question`,
+    );
+    if (!ok || !data) return;
+    setCurrent(data);
+
+    if (data.state === "closed" || data.state === "revealed") {
+      const { ok: rOk, data: rData } = await safeFetchJson<Results>(
+        `/api/sessions/${id}/results/${data.sessionQuestionId}`,
       );
-      if (!cqData) return;
-      setCurrent(cqData);
-
-      if (cqData.state === "closed" || cqData.state === "revealed") {
-        const { ok: rOk, data: rData } = await safeFetchJson<Results>(
-          `/api/sessions/${id}/results/${cqData.sessionQuestionId}`,
-        );
-        if (rOk && rData) setResults(rData);
-      } else {
-        setResults(null);
-      }
+      if (rOk && rData) setResults(rData);
+    } else {
+      setResults(null);
     }
   }, [id]);
 
+  // One-time load: the session's code doesn't come back from the
+  // per-id status route, so grab it from the list once up front.
   useEffect(() => {
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => clearInterval(interval);
-  }, [poll]);
+    safeFetchJson<{ sessions: { id: string; code: string }[] }>(
+      "/api/sessions",
+    ).then(({ ok, data }) => {
+      if (ok && data) {
+        const match = data.sessions.find((s) => s.id === id);
+        if (match) setCode(match.code);
+      }
+    });
+    refreshSession();
+    refreshPlayers();
+    refreshCurrentQuestion();
+  }, [id, refreshSession, refreshPlayers, refreshCurrentQuestion]);
+
+  // Everything after the initial load is realtime-driven.
+  useSessionRealtime(id, {
+    onSessionChange: refreshSession,
+    onQuestionChange: refreshCurrentQuestion,
+    onPlayerJoin: refreshPlayers,
+    onAnswerChange: (payload) => {
+      // player_answers has no session_id column, so this event isn't
+      // pre-filtered to our session - only act on it if it's for the
+      // question we're currently showing.
+      const row = payload.new as { session_question_id?: string };
+      if (current && row.session_question_id === current.sessionQuestionId) {
+        refreshCurrentQuestion();
+      }
+    },
+  });
 
   async function sendAction(action: string) {
     setActionLoading(true);
@@ -105,7 +121,10 @@ export default function SessionControlPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
-    await poll();
+    // Realtime will also push the resulting change, but refreshing
+    // right away makes the button feel instant instead of waiting on
+    // the round-trip through Postgres's replication stream.
+    await Promise.all([refreshSession(), refreshCurrentQuestion()]);
     setActionLoading(false);
   }
 

@@ -5,60 +5,76 @@ import { useRouter } from "next/navigation";
 import { Lock, Check, Users } from "lucide-react";
 import PlayerHeader from "@/components/PlayerHeader";
 import { getPlayerSession } from "@/lib/player-session";
+import { safeFetchJson } from "@/lib/safe-fetch";
+import { useSessionRealtime } from "@/hooks/useSessionRealtime";
+
+// The answered-count number needs a service-role-backed route (see
+// its own comment), which means it can't ride the free realtime
+// subscription the way question-state changes can. Polling it every
+// 3s is a big drop from the old 1.5s "poll literally everything"
+// approach, and it's the smallest surface left that still needs it.
+const ANSWERED_COUNT_POLL_MS = 3000;
 
 export default function AnswerSubmittedPage() {
   const router = useRouter();
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [totalPlayers, setTotalPlayers] = useState(0);
 
-  const poll = useCallback(async () => {
+  const checkQuestionState = useCallback(
+    async (sid: string) => {
+      const { ok, data } = await safeFetchJson<{ state: string }>(
+        `/api/sessions/${sid}/current-question`,
+      );
+      if (ok && data && (data.state === "closed" || data.state === "revealed")) {
+        router.push("/play/result");
+      }
+    },
+    [router],
+  );
+
+  const refreshAnsweredCount = useCallback(async () => {
+    const stored = getPlayerSession();
+    if (!stored) return;
+
+    const [{ ok: pOk, data: pData }, cq] = await Promise.all([
+      safeFetchJson<{ players: unknown[] }>(
+        `/api/sessions/${stored.sessionId}/players`,
+      ),
+      stored.lastSessionQuestionId
+        ? safeFetchJson<{ count: number }>(
+            `/api/sessions/${stored.sessionId}/answered-count/${stored.lastSessionQuestionId}`,
+          )
+        : Promise.resolve({ ok: false, data: null }),
+    ]);
+    if (pOk && pData) setTotalPlayers(pData.players.length);
+    if (cq.ok && cq.data) setAnsweredCount(cq.data.count);
+  }, []);
+
+  useEffect(() => {
     const stored = getPlayerSession();
     if (!stored) {
       router.push("/join");
       return;
     }
+    setSessionId(stored.sessionId);
+    checkQuestionState(stored.sessionId);
+    refreshAnsweredCount();
 
-    try {
-      const statusRes = await fetch(`/api/sessions/${stored.sessionId}`);
-      const statusData = await statusRes.json();
-      if (statusRes.ok && statusData.status === "completed") {
-        router.push("/play/complete");
-        return;
-      }
-
-      const [questionRes, playersRes] = await Promise.all([
-        fetch(`/api/sessions/${stored.sessionId}/current-question`),
-        fetch(`/api/sessions/${stored.sessionId}/players`),
-      ]);
-      const questionData = await questionRes.json();
-      const playersData = await playersRes.json();
-
-      if (playersRes.ok) setTotalPlayers(playersData.players.length);
-
-      if (questionData.state === "closed" || questionData.state === "revealed") {
-        router.push("/play/result");
-        return;
-      }
-
-      if (stored.lastSessionQuestionId) {
-        const resultsRes = await fetch(
-          `/api/sessions/${stored.sessionId}/results/${stored.lastSessionQuestionId}`,
-        );
-        if (resultsRes.ok) {
-          const resultsData = await resultsRes.json();
-          setAnsweredCount(resultsData.total ?? 0);
-        }
-      }
-    } catch {
-      // keep retrying silently
-    }
-  }, [router]);
-
-  useEffect(() => {
-    poll();
-    const interval = setInterval(poll, 1500);
+    const interval = setInterval(refreshAnsweredCount, ANSWERED_COUNT_POLL_MS);
     return () => clearInterval(interval);
-  }, [poll]);
+  }, [router, checkQuestionState, refreshAnsweredCount]);
+
+  // The actual "move on" trigger - question closing - is realtime,
+  // not part of that poll.
+  useSessionRealtime(sessionId, {
+    onQuestionChange: (payload) => {
+      const row = payload.new as { state?: string };
+      if (row.state === "closed" || row.state === "revealed") {
+        router.push("/play/result");
+      }
+    },
+  });
 
   return (
     <div className="min-h-screen flex flex-col">

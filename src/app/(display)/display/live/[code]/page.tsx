@@ -5,6 +5,7 @@ import { Sparkles, Users, Trophy, PartyPopper, CheckCircle2 } from "lucide-react
 import DisplayHeader from "@/components/DisplayHeader";
 import CountdownTimer from "@/components/CountdownTimer";
 import { safeFetchJson } from "@/lib/safe-fetch";
+import { useSessionRealtime } from "@/hooks/useSessionRealtime";
 
 interface SessionInfo {
   id: string;
@@ -34,6 +35,14 @@ interface LeaderboardEntry {
   score: number;
 }
 
+// Results (answer counts) and the final leaderboard both need the
+// service-role-backed routes, since player_answers has no public RLS
+// read policy - Realtime can't push what a direct anonymous query
+// isn't allowed to read either. This poll only covers those two
+// numbers now; everything else on this page (lobby, question
+// launching, player count) is realtime-driven below.
+const RESULTS_POLL_MS = 3000;
+
 const optionColors = ["bg-option-a", "bg-option-b", "bg-option-c", "bg-option-d"];
 
 export default function LiveDisplayPage({
@@ -58,51 +67,69 @@ export default function LiveDisplayPage({
     );
   }, [code]);
 
-  const poll = useCallback(async () => {
+  const refreshSession = useCallback(async () => {
     if (!sessionId) return;
-
-    const [{ ok: sOk, data: sData }, { ok: pOk, data: pData }] =
-      await Promise.all([
-        safeFetchJson<SessionInfo>(`/api/sessions/${sessionId}`),
-        safeFetchJson<{ players: unknown[] }>(
-          `/api/sessions/${sessionId}/players`,
-        ),
-      ]);
-    // If this cycle's requests failed or came back empty (e.g. a dev
-    // hot-reload interrupted them), just skip - the next interval
-    // tick will retry rather than clearing what's currently on screen.
-    if (!sOk || !sData) return;
-    setSession(sData);
-    if (pOk && pData) setPlayerCount(pData.players.length);
-
-    if (sData.status === "active") {
-      const { data: cqData } = await safeFetchJson<CurrentQuestion>(
-        `/api/sessions/${sessionId}/current-question`,
-      );
-      if (!cqData) return;
-      setCurrent(cqData);
-
-      if (cqData.state === "closed" || cqData.state === "revealed") {
-        const { ok: rOk, data: rData } = await safeFetchJson<Results>(
-          `/api/sessions/${sessionId}/results/${cqData.sessionQuestionId}`,
-        );
-        if (rOk && rData) setResults(rData);
-      }
-    }
-
-    if (sData.status === "completed") {
-      const { ok: lOk, data: lData } = await safeFetchJson<{
-        leaderboard: LeaderboardEntry[];
-      }>(`/api/sessions/${sessionId}/leaderboard`);
-      if (lOk && lData) setLeaderboard(lData.leaderboard);
-    }
+    const { ok, data } = await safeFetchJson<SessionInfo>(
+      `/api/sessions/${sessionId}`,
+    );
+    if (ok && data) setSession(data);
   }, [sessionId]);
 
+  const refreshPlayers = useCallback(async () => {
+    if (!sessionId) return;
+    const { ok, data } = await safeFetchJson<{ players: unknown[] }>(
+      `/api/sessions/${sessionId}/players`,
+    );
+    if (ok && data) setPlayerCount(data.players.length);
+  }, [sessionId]);
+
+  const refreshCurrentQuestion = useCallback(async () => {
+    if (!sessionId) return;
+    const { ok, data } = await safeFetchJson<CurrentQuestion>(
+      `/api/sessions/${sessionId}/current-question`,
+    );
+    if (ok && data) setCurrent(data);
+  }, [sessionId]);
+
+  // Reduced-frequency poll: only the RLS-sensitive numbers
+  // (answer counts, final leaderboard).
+  const pollResults = useCallback(async () => {
+    if (!sessionId || !session) return;
+
+    if (session.status === "active" && current?.sessionQuestionId) {
+      const { ok, data } = await safeFetchJson<Results>(
+        `/api/sessions/${sessionId}/results/${current.sessionQuestionId}`,
+      );
+      if (ok && data) setResults(data);
+    }
+
+    if (session.status === "completed") {
+      const { ok, data } = await safeFetchJson<{
+        leaderboard: LeaderboardEntry[];
+      }>(`/api/sessions/${sessionId}/leaderboard`);
+      if (ok && data) setLeaderboard(data.leaderboard);
+    }
+  }, [sessionId, session, current]);
+
+  // Initial load once the session id resolves.
   useEffect(() => {
-    poll();
-    const interval = setInterval(poll, 2000);
+    if (!sessionId) return;
+    refreshSession();
+    refreshPlayers();
+    refreshCurrentQuestion();
+  }, [sessionId, refreshSession, refreshPlayers, refreshCurrentQuestion]);
+
+  useEffect(() => {
+    pollResults();
+    const interval = setInterval(pollResults, RESULTS_POLL_MS);
     return () => clearInterval(interval);
-  }, [poll]);
+  }, [pollResults]);
+
+  useSessionRealtime(sessionId, {
+    onSessionChange: refreshSession,
+    onQuestionChange: refreshCurrentQuestion,
+    onPlayerJoin: refreshPlayers,
+  });
 
   if (!session) {
     return (
